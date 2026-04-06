@@ -1,0 +1,82 @@
+services:
+  # Main FastAPI application
+  template_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    environment:
+      - NATS_HOSTS=nats://nats:4222
+    volumes:
+      - .:/app
+    depends_on:
+      - template_app_migrations
+      - redis
+      - nats
+    networks:
+      - template_app_network
+
+  template_app_migrations:
+    image: fastapi_template-template_app:latest
+    command: ["uv", "run", "alembic",  "upgrade", "head"]
+    env_file:
+      - .env
+    volumes:
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini
+    depends_on:
+      - template_app_postgres
+    networks:
+      - template_app_network
+
+  # DB service
+  template_app_postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    environment:
+      - PGPORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5433:${POSTGRES_PORT}"
+    volumes:
+      - template_app_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - template_app_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    networks:
+      - template_app_network
+    restart: unless-stopped
+
+  nats:
+    image: nats:latest
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"  # NATS client port
+      - "8222:8222"  # NATS monitoring port
+    networks:
+      - template_app_network
+    restart: unless-stopped
+
+
+volumes:
+  template_app_postgres_data:
+
+networks:
+  template_app_network:
+    name: template_app_network
+    external: true

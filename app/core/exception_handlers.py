@@ -13,7 +13,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from app.domain.exceptions import DomainException, DuplicateRequestError, RequestNotFoundError
+from app.domain.exceptions import (
+    DomainException,
+    DuplicateRequestError,
+    GraphicsConfigError,
+    GraphicsDataError,
+    GraphicsPermissionError,
+    GraphicsValidationError,
+    RequestNotFoundError,
+)
 
 
 def _error_body(code: str, message: str, details: dict | None = None) -> dict:
@@ -45,6 +53,46 @@ def register_exception_handlers(app: FastAPI) -> None:
                 code=exc.code or "REQUEST_NOT_FOUND",
                 message=exc.message,
                 details={"request_id": exc.request_id},
+            ),
+        )
+
+    @app.exception_handler(GraphicsValidationError)
+    async def graphics_validation_handler(request: Request, exc: GraphicsValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content=_error_body(
+                code=exc.code or "GRAPHICS_VALIDATION_ERROR",
+                message=exc.message,
+            ),
+        )
+
+    @app.exception_handler(GraphicsPermissionError)
+    async def graphics_permission_handler(request: Request, exc: GraphicsPermissionError) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content=_error_body(
+                code=exc.code or "ACCESS_DENIED",
+                message=exc.message,
+            ),
+        )
+
+    @app.exception_handler(GraphicsConfigError)
+    async def graphics_config_handler(request: Request, exc: GraphicsConfigError) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content=_error_body(
+                code=exc.code or "PROJECT_CONFIG_NOT_FOUND",
+                message=exc.message,
+            ),
+        )
+
+    @app.exception_handler(GraphicsDataError)
+    async def graphics_data_handler(request: Request, exc: GraphicsDataError) -> JSONResponse:
+        return JSONResponse(
+            status_code=502,
+            content=_error_body(
+                code=exc.code or "DATA_SOURCE_ERROR",
+                message=exc.message,
             ),
         )
 

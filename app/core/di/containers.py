@@ -2,6 +2,7 @@
 
 from dependency_injector import containers, providers
 
+from app.application.graphics.service import GraphicsService
 from app.application.services.health_service import HealthService
 from app.application.services.service import Service
 from app.core.config.database import DatabaseSettings
@@ -11,9 +12,14 @@ from app.infrastructure.cache.redis_client import AsyncRedisCache
 from app.infrastructure.messaging.message_handler import DefaultMessageHandler
 from app.infrastructure.messaging.nats_consumer import NATSConsumer
 from app.infrastructure.messaging.nats_publisher import NATSPublisher
+from app.infrastructure.persistence.alert_repository import AlertRepository
 from app.infrastructure.persistence.database import DatabaseManager
 from app.infrastructure.persistence.request_repository import RequestRepository
+from app.infrastructure.persistence.statistic_repository import StatisticRepository
 from app.infrastructure.persistence.uow import SqlAlchemyUnitOfWork
+from app.infrastructure.providers.mock_config import MockProjectConfigProvider
+from app.infrastructure.providers.postgres_alert import PostgresAlertProvider
+from app.infrastructure.providers.postgres_timeseries import PostgresTimeseriesProvider
 
 
 class Container(containers.DeclarativeContainer):
@@ -23,6 +29,7 @@ class Container(containers.DeclarativeContainer):
         modules=[
             "app.interfaces.api.routes.service",
             "app.interfaces.api.routes.health",
+            "app.interfaces.api.routes.graphics",
             "app.interfaces.api.routes.base",
             "app.interfaces.api.routes.nats",
             "app.infrastructure.messaging.nats_consumer",
@@ -86,4 +93,23 @@ class Container(containers.DeclarativeContainer):
         cache_client=redis_client,
         repository=request_repository,
         logger=logger,
+    )
+
+    # Graphics — repositories
+    statistic_repository = providers.Factory(StatisticRepository, db=db)
+    alert_repository = providers.Factory(AlertRepository, db=db)
+
+    # Graphics — providers (adapters)
+    timeseries_provider = providers.Factory(
+        PostgresTimeseriesProvider, repo=statistic_repository
+    )
+    alert_provider = providers.Factory(PostgresAlertProvider, repo=alert_repository)
+    config_provider = providers.Factory(MockProjectConfigProvider)
+
+    # Graphics — service
+    graphics_service = providers.Factory(
+        GraphicsService,
+        timeseries_provider=timeseries_provider,
+        alert_provider=alert_provider,
+        config_provider=config_provider,
     )

@@ -11,6 +11,7 @@ from app.application.graphics.metric_resolver import MetricResolver
 from app.application.graphics.strategy import (
     AlertsStrategy,
     MetricsStrategy,
+    ProjectsStrategy,
     get_strategy_class,
 )
 from app.application.interfaces.services import IGraphicsService
@@ -70,10 +71,11 @@ class GraphicsService(IGraphicsService):
 
     def _build_strategy(self, product: str):
         """Instantiate the correct strategy with its dependencies."""
-        if product == "metrics":
+        if product in ("metrics", "projects"):
             resolver = MetricResolver(self._ts)
             processor = DataProcessor()
-            return MetricsStrategy(self._ts, processor, resolver)
+            cls = MetricsStrategy if product == "metrics" else ProjectsStrategy
+            return cls(self._ts, processor, resolver)
 
         if product == "alerts":
             return AlertsStrategy(self._alerts)

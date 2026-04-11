@@ -22,6 +22,10 @@ from app.domain.interfaces.providers.alert_provider import IAlertProvider
 from app.domain.interfaces.providers.timeseries_provider import ITimeseriesProvider
 from app.domain.models.graphics import GraphicsResult, SeriesData
 
+# Metrics whose values represent search engine positions (lower = better).
+# Only these metrics support the position_distribution visualization.
+POSITION_METRICS: set[str] = {"PY", "PG", "POS"}
+
 
 class IProductStrategy(ABC):
     """Base interface for product strategies."""
@@ -73,22 +77,32 @@ class MetricsStrategy(IProductStrategy):
 
             datasets = self._processor.process(datasets, compute_deltas=True)
 
-            # Build line series
-            for ds in datasets:
+            summary_agg = self._resolve_summary_aggregation(field)
+            aggregated = self._processor.aggregate_datasets(
+                datasets,
+                aggregation=summary_agg,
+                label=f"{field.name} — {req.metric_code}",
+            )
+            if aggregated is not None:
                 series = builder.build(
-                    dataset=ds,
+                    dataset=aggregated,
                     metric_code=req.metric_code,
                     render_type=req.mode or "line",
                 )
                 all_series.append(series)
 
-            # Build visualization diagrams (pie, histogram, etc.)
+            # Build per-series visualization diagrams
             for vis_type in command.requested_visualizations:
+                if vis_type == "position_distribution":
+                    # Only build for position-related metrics
+                    if req.metric_code not in POSITION_METRICS or not datasets:
+                        continue
                 vis_builder = get_visualization_builder(vis_type)
                 if vis_builder is not None and datasets:
                     diagram = vis_builder.build(
                         datasets,
                         reverse_trend=field.reverse_trend,
+                        series_id=req.metric_code,
                     )
                     all_diagrams.append(diagram)
 
@@ -107,6 +121,22 @@ class MetricsStrategy(IProductStrategy):
         )
 
     @staticmethod
+    def _resolve_summary_aggregation(field) -> str:
+        """Determine the cross-entity aggregation function for chart lines.
+
+        Walks the aggregation dict from project → page → cluster → query
+        looking for a real aggregation function (total/average/max/min),
+        skipping delegation types (use_cluster, single_value).
+        """
+        REAL_AGGS = {"total", "average", "max", "min"}
+        # Prefer project-level — it represents the highest-level summary
+        for entity in ("project", "page", "cluster", "query"):
+            agg = field.aggregation.get(entity)
+            if agg in REAL_AGGS:
+                return agg
+        return "average"
+
+    @staticmethod
     def _flatten_filters(command: BuildGraphicsCommand) -> list | None:
         """Convert filter dict to flat list of filter_value_ids (UUIDs)."""
         if not command.filters:
@@ -121,6 +151,16 @@ class MetricsStrategy(IProductStrategy):
                 except ValueError:
                     continue
         return result or None
+
+
+class ProjectsStrategy(MetricsStrategy):
+    """Strategy for 'projects' product — same pipeline as metrics, scoped to project level."""
+
+    async def execute(self, command: BuildGraphicsCommand) -> GraphicsResult:
+        result = await super().execute(command)
+        return result.model_copy(
+            update={"meta": {**result.meta, "product": "projects"}},
+        )
 
 
 class AlertsStrategy(IProductStrategy):
@@ -153,6 +193,7 @@ class AlertsStrategy(IProductStrategy):
 
 _STRATEGIES: dict[str, type[IProductStrategy]] = {
     "metrics": MetricsStrategy,
+    "projects": ProjectsStrategy,
     "alerts": AlertsStrategy,
 }
 

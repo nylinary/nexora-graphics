@@ -37,30 +37,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     patch_uvicorn_loggers(logger)
 
     # ========== START: Background services ==========
-    # Start NATS consumer
-    nats_consumer = container.nats_consumer()
-    await nats_consumer.start()
-    await logger.info("NATS consumer started")
+    nats_consumer = None
+    nats_publisher = None
+    stats_client = None
 
-    # Connect NATS publisher
-    nats_publisher = container.nats_publisher()
-    await nats_publisher.connect()
-    await logger.info("NATS publisher connected")
+    try:
+        nats_consumer = container.nats_consumer()
+        await nats_consumer.start()
+        await logger.info("NATS consumer started")
+
+        nats_publisher = container.nats_publisher()
+        await nats_publisher.connect()
+        await logger.info("NATS publisher connected")
+    except Exception as e:
+        await logger.warning(f"NATS unavailable, starting without messaging: {e}")
+
+    try:
+        stats_client = container.nats_statistics_client()
+        await stats_client.start()
+        await logger.info("NatsStatisticsClient started")
+    except Exception as e:
+        await logger.warning(f"Statistics NATS client unavailable: {e}")
 
     yield
 
     # ========== STOP: Background services ==========
     await logger.info("Stopping background services...")
 
-    # Disconnect NATS publisher
-    await nats_publisher.disconnect()
-
-    # Stop NATS consumer
-    await nats_consumer.stop()
+    if stats_client:
+        await stats_client.stop()
+    if nats_publisher:
+        await nats_publisher.disconnect()
+    if nats_consumer:
+        await nats_consumer.stop()
 
     # Dispose and shutdown managed resources
     await container.db().dispose()
-    await container.redis_client().close()
+    try:
+        await container.redis_client().close()
+    except Exception:
+        pass
     logger.shutdown()
 
 

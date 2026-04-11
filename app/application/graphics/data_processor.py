@@ -4,9 +4,12 @@ Handles:
 - Delta calculation (absolute difference between consecutive points)
 - Gap filling (missing dates → None)
 - Normalization (optional, e.g. percentage of first value)
+- Cross-entity aggregation (collapse N entities into 1 aggregated series)
 """
 
 from __future__ import annotations
+
+import uuid
 
 from app.domain.models.graphics import TimeseriesDataset
 
@@ -49,6 +52,46 @@ class DataProcessor:
             for v in dataset.values
         ]
         return dataset.model_copy(update={"values": normalized})
+
+    def aggregate_datasets(
+        self,
+        datasets: list[TimeseriesDataset],
+        aggregation: str,
+        label: str = "Aggregated",
+    ) -> TimeseriesDataset | None:
+        """Collapse multiple entity datasets into a single aggregated dataset.
+
+        Aggregation types: 'average', 'total' (sum), 'max', 'min', 'single_value' (→ average).
+        """
+        if not datasets:
+            return None
+
+        dates = datasets[0].dates
+        n_points = len(dates)
+        agg_values: list[float | None] = []
+
+        for i in range(n_points):
+            vals = [ds.values[i] for ds in datasets if i < len(ds.values) and ds.values[i] is not None]
+            if not vals:
+                agg_values.append(None)
+                continue
+            if aggregation in ("average", "single_value"):
+                agg_values.append(round(sum(vals) / len(vals), 4))
+            elif aggregation == "total":
+                agg_values.append(round(sum(vals), 4))
+            elif aggregation == "max":
+                agg_values.append(round(max(vals), 4))
+            elif aggregation == "min":
+                agg_values.append(round(min(vals), 4))
+            else:
+                agg_values.append(round(sum(vals) / len(vals), 4))
+
+        return TimeseriesDataset(
+            entity_id=uuid.UUID(int=0),
+            entity_label=label,
+            values=agg_values,
+            dates=dates,
+        )
 
     def process(
         self,

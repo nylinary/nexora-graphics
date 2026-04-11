@@ -1,82 +1,49 @@
 services:
-  # Main FastAPI application
-  template_app:
+  graphics:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    container_name: graphics-service
     ports:
       - "8001:8000"
     env_file:
       - .env
     environment:
+      # host.docker.internal — доступ к хостовому PostgreSQL из контейнера
+      - DATABASE_DSN=postgresql+asyncpg://nylinary:null@host.docker.internal:5432/nexora
+      - REDIS_HOST=redis
       - NATS_HOSTS=nats://nats:4222
     volumes:
       - .:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - template_app_migrations
-      - redis
-      - nats
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
     networks:
-      - template_app_network
-
-  template_app_migrations:
-    image: fastapi_template-template_app:latest
-    command: ["uv", "run", "alembic",  "upgrade", "head"]
-    env_file:
-      - .env
-    volumes:
-      - ./migrations:/app/migrations
-      - ./alembic.ini:/app/alembic.ini
-    depends_on:
-      - template_app_postgres
-    networks:
-      - template_app_network
-
-  # DB service
-  template_app_postgres:
-    image: postgres:16-alpine
-    env_file:
-      - .env
-    environment:
-      - PGPORT=${POSTGRES_PORT}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    ports:
-      - "5433:${POSTGRES_PORT}"
-    volumes:
-      - template_app_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - template_app_network
+      - graphics_network
     restart: unless-stopped
 
   redis:
-    image: redis:latest
+    image: redis:7-alpine
+    container_name: graphics-redis
     networks:
-      - template_app_network
+      - graphics_network
     restart: unless-stopped
 
   nats:
-    image: nats:latest
+    image: nats:2-alpine
+    container_name: graphics-nats
     command: ["-js", "-m", "8222"]
     ports:
-      - "4222:4222"  # NATS client port
-      - "8222:8222"  # NATS monitoring port
+      - "4223:4222"
+      - "8223:8222"
     networks:
-      - template_app_network
+      - graphics_network
     restart: unless-stopped
 
-
-volumes:
-  template_app_postgres_data:
-
 networks:
-  template_app_network:
-    name: template_app_network
-    external: true
+  graphics_network:
+    name: graphics_network

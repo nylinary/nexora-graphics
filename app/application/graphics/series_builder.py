@@ -55,7 +55,7 @@ class MetricSeriesBuilder(ISeriesBuilder):
             }
 
         return SeriesData(
-            id=f"{metric_code}_{dataset.entity_id}",
+            id=metric_code,
             type="metric",
             label=dataset.entity_label,
             unit=unit,

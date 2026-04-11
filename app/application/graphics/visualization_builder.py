@@ -78,7 +78,11 @@ class PieVisualizationBuilder(IVisualizationBuilder):
         if fall_ids:
             data.append({"id": "fall", "label": "Упало", "value": len(fall_ids), "entity_ids": fall_ids})
 
-        return {"type": "pie", "legend": "Распределение по динамике", "data": data}
+        series_id = kwargs.get("series_id", "")
+        legend = "Распределение по динамике"
+        if series_id:
+            legend = f"{series_id} — {legend}"
+        return {"type": "pie", "legend": legend, "series_id": series_id, "data": data}
 
 
 class HistogramVisualizationBuilder(IVisualizationBuilder):
@@ -97,8 +101,10 @@ class HistogramVisualizationBuilder(IVisualizationBuilder):
             if val is not None:
                 last_values.append(val)
 
+        series_id = kwargs.get("series_id", "")
+
         if not last_values:
-            return {"type": "histogram", "buckets": [], "stats": {}}
+            return {"type": "histogram", "series_id": series_id, "buckets": [], "stats": {}}
 
         min_val = min(last_values)
         max_val = max(last_values)
@@ -106,6 +112,7 @@ class HistogramVisualizationBuilder(IVisualizationBuilder):
         if min_val == max_val:
             return {
                 "type": "histogram",
+                "series_id": series_id,
                 "buckets": [{"from": min_val, "to": max_val, "count": len(last_values)}],
                 "stats": {"min": min_val, "max": max_val, "avg": min_val, "count": len(last_values)},
             }
@@ -121,6 +128,7 @@ class HistogramVisualizationBuilder(IVisualizationBuilder):
         avg_val = sum(last_values) / len(last_values)
         return {
             "type": "histogram",
+            "series_id": series_id,
             "buckets": buckets,
             "stats": {
                 "min": round(min_val, 2),
@@ -131,11 +139,69 @@ class HistogramVisualizationBuilder(IVisualizationBuilder):
         }
 
 
+class PositionDistributionBuilder(IVisualizationBuilder):
+    """Distributes entities into fixed position buckets with deltas."""
+
+    BUCKETS = [
+        (1, 3, "1-3", "#1890ff"),
+        (1, 10, "1-10", "#52c41a"),
+        (11, 30, "11-30", "#52c41a"),
+        (31, 50, "31-50", "#faad14"),
+        (51, 100, "51-100", "#faad14"),
+        (101, float("inf"), "100+", "#8c8c8c"),
+    ]
+
+    def build(
+        self,
+        datasets: list[TimeseriesDataset],
+        **kwargs,
+    ) -> dict[str, Any]:
+        series_id = kwargs.get("series_id", "")
+
+        # Gather first and last non-null value per entity
+        starts: list[float] = []
+        ends: list[float] = []
+        for ds in datasets:
+            vals = ds.values
+            if not vals:
+                continue
+            start = next((v for v in vals if v is not None), None)
+            end = next((v for v in reversed(vals) if v is not None), None)
+            if start is not None:
+                starts.append(start)
+            if end is not None:
+                ends.append(end)
+
+        total = len(ends) or 1
+
+        buckets: list[dict[str, Any]] = []
+        for lo, hi, label, color in self.BUCKETS:
+            count_end = sum(1 for v in ends if lo <= v <= hi) if hi != float("inf") else sum(1 for v in ends if v >= lo)
+            count_start = sum(1 for v in starts if lo <= v <= hi) if hi != float("inf") else sum(1 for v in starts if v >= lo)
+            pct = round(count_end / total * 100) if total else 0
+            delta = count_end - count_start
+            buckets.append({
+                "label": label,
+                "color": color,
+                "percentage": pct,
+                "count": count_end,
+                "delta": delta,
+            })
+
+        return {
+            "type": "position_distribution",
+            "series_id": series_id,
+            "buckets": buckets,
+            "total": total,
+        }
+
+
 # ── Registry ──
 
 _VIS_BUILDERS: dict[str, type[IVisualizationBuilder]] = {
     "pie": PieVisualizationBuilder,
     "histogram": HistogramVisualizationBuilder,
+    "position_distribution": PositionDistributionBuilder,
 }
 
 

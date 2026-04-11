@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from app.core.di.containers import Container; c = Container\\(\\); print\\('DI OK'\\)\")",
+      "Bash(/Users/nylinary/nylinary/work/nexora/graphics/nexora-graphics-fe/node_modules/.bin/tsc --noEmit -p /Users/nylinary/nylinary/work/nexora/graphics/nexora-graphics-fe/tsconfig.app.json)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(ls tsconfig*.json)",
+      "Bash(./node_modules/.bin/tsc --project tsconfig.app.json --noEmit)",
+      "Bash(echo \"EXIT: $?\")",
+      "Read(//Users/nylinary/nylinary/work/nexora/**)",
+      "Bash(ls /Users/nylinary/nylinary/work/nexora/graphics/app/infrastructure/persistence/*.py)",
+      "Bash(touch /Users/nylinary/nylinary/work/nexora/statistics-service/.env)",
+      "Bash(uv lock:*)",
+      "Bash(curl -s http://localhost:8002/api/v1/health/)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:8001/api/v1/graphics/filters/fields\")",
+      "Bash(docker exec:*)",
+      "Bash(curl -s \"http://localhost:8001/api/v1/graphics/metrics\")",
+      "Bash(curl -s \"http://localhost:8001/api/v1/graphics/projects/search?q=test\")",
+      "Bash(curl -s \"http://localhost:8001/api/v1/graphics/filters/values?field_id=9a6cf757-daa8-43fb-a0be-778e26a6f1b5\")",
+      "Bash(curl -s http://localhost:8223/jsz?streams=true)",
+      "Bash(curl -s -X POST http://localhost:8001/api/v1/graphics/build -H 'Content-Type: application/json' -d '{:*)",
+      "Bash(python3 -c ':*)"
+    ],
+    "additionalDirectories": [
+      "/Users/nylinary/nylinary/work/nexora/statistics-service"
+    ]
+  }
+}

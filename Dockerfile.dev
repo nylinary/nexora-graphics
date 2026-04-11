@@ -21,14 +21,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Копируем проект
-COPY . /app
+# Копируем файлы зависимостей отдельно для кэширования слоя
+COPY pyproject.toml uv.lock README.md ./
 
-# Ставим зависимости (uv сам создаст .venv)
+# Ставим зависимости с dev-группой
 RUN uv sync --frozen
+
+# Копируем исходный код (при --reload код монтируется через volume)
+COPY . /app
 
 # Экспонируем порт
 EXPOSE 8000
 
-# Command to run the application in development mode
 CMD ["uv", "run", "uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

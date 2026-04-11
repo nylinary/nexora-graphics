@@ -2,6 +2,7 @@
 
 from dependency_injector import containers, providers
 
+from app.application.graphics.metric_resolver import MetricResolver
 from app.application.graphics.service import GraphicsService
 from app.application.services.health_service import HealthService
 from app.application.services.service import Service
@@ -12,14 +13,14 @@ from app.infrastructure.cache.redis_client import AsyncRedisCache
 from app.infrastructure.messaging.message_handler import DefaultMessageHandler
 from app.infrastructure.messaging.nats_consumer import NATSConsumer
 from app.infrastructure.messaging.nats_publisher import NATSPublisher
-from app.infrastructure.persistence.alert_repository import AlertRepository
+from app.infrastructure.messaging.nats_statistics_client import NatsStatisticsClient
 from app.infrastructure.persistence.database import DatabaseManager
 from app.infrastructure.persistence.request_repository import RequestRepository
-from app.infrastructure.persistence.statistic_repository import StatisticRepository
 from app.infrastructure.persistence.uow import SqlAlchemyUnitOfWork
 from app.infrastructure.providers.mock_config import MockProjectConfigProvider
-from app.infrastructure.providers.postgres_alert import PostgresAlertProvider
-from app.infrastructure.providers.postgres_timeseries import PostgresTimeseriesProvider
+from app.infrastructure.providers.nats_alert import NATSAlertProvider
+from app.infrastructure.providers.nats_statistics_rpc import NATSStatisticsRPCProvider
+from app.infrastructure.providers.nats_timeseries import NATSTimeseriesProvider
 
 
 class Container(containers.DeclarativeContainer):
@@ -95,16 +96,25 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
-    # Graphics — repositories
-    statistic_repository = providers.Factory(StatisticRepository, db=db)
-    alert_repository = providers.Factory(AlertRepository, db=db)
-
-    # Graphics — providers (adapters)
-    timeseries_provider = providers.Factory(
-        PostgresTimeseriesProvider, repo=statistic_repository
+    # Statistics service NATS client
+    nats_statistics_client = providers.Singleton(
+        NatsStatisticsClient,
+        nats_url=nats_settings.provided.hosts,
+        timeout_sec=30.0,
     )
-    alert_provider = providers.Factory(PostgresAlertProvider, repo=alert_repository)
+
+    # Graphics — providers (via NATS → statistics-service)
+    timeseries_provider = providers.Factory(
+        NATSTimeseriesProvider, client=nats_statistics_client
+    )
+    alert_provider = providers.Factory(NATSAlertProvider, client=nats_statistics_client)
+    statistics_rpc = providers.Factory(
+        NATSStatisticsRPCProvider, client=nats_statistics_client
+    )
     config_provider = providers.Factory(MockProjectConfigProvider)
+    metric_resolver = providers.Factory(
+        MetricResolver, provider=timeseries_provider
+    )
 
     # Graphics — service
     graphics_service = providers.Factory(

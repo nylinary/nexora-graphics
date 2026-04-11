@@ -10,14 +10,16 @@ ENV PYTHONPATH=/app \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH"
 
-# Копируем проект
-COPY . /app
+# Копируем файлы зависимостей отдельно для кэширования слоя
+COPY pyproject.toml uv.lock README.md ./
 
 # Ставим зависимости (uv сам создаст .venv)
 RUN uv sync --frozen --no-dev
 
+# Копируем исходный код
+COPY app/ ./app/
+
 # Экспонируем порт
 EXPOSE 8000
 
-# Command to run the application in development mode
 CMD ["uv", "run", "uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8000"]
